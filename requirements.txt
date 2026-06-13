@@ -1,0 +1,8 @@
+fastapi
+uvicorn[standard]
+pydantic
+fasttext
+numpy
+scikit-learn
+sentence-transformers
+torch

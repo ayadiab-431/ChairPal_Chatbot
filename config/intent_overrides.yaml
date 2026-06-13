@@ -1,0 +1,46 @@
+overrides:
+  - name: high_pulse_ar
+    target_intent: sensor_interpretation
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: true
+        keyword_groups:
+          - ["نبضي", "نبضى", "نبضات قلبي", "نبضات قلبى", "ضربات قلبي", "ضربات قلبى"]
+          - ["عالي", "عالى", "مرتفع", "سريع", "زيادة", "زايد"]
+
+  - name: high_pulse_en
+    target_intent: sensor_interpretation
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: true
+        keyword_groups:
+          - ["heart rate", "pulse", "bpm"]
+          - ["high", "elevated", "fast", "rapid"]
+
+  - name: app_features
+    target_intent: bot_identity
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: true
+        keyword_groups:
+          - ["التطبيق", "ابلكيشن", "app", "application"]
+          - ["بيعمل ايه", "بيعمل إيه", "وظيف", "مميزات", "features", "what does the app do", "what can the app do"]
+
+  - name: fall_detection_en
+    target_intent: app_help
+    min_confidence: 0.90
+    conditions:
+      - type: keyword_match
+        match_all: false
+        keywords: ["falls over", "fall over", "tips over", "tip over", "chair falls", "if it falls", "wheelchair falls", "suddenly falls", "fall detection", "sos button", "red button", "emergency button", "what if i fall", "if i fall"]
+
+  - name: sos_arabic
+    target_intent: app_help
+    min_confidence: 0.90
+    conditions:
+      - type: keyword_match
+        match_all: false
+        keywords: ["زرار الاحمر", "الزرار الاحمر", "زر الاحمر", "الزر الاحمر", "زرار الطوارئ", "زر الطوارئ", "زرار sos", "زر sos", "فايدة الزرار", "فايدة الزر", "فايده الزرار", "لو الكرسي اتقلب", "لو وقع الكرسي", "لو سقط الكرسي", "كشف السقوط"]

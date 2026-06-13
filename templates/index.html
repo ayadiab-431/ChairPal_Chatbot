@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>♿ Chairpal AI Chatbot Simulator</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=Cairo:wght@300;400;700;900&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(17, 25, 40, 0.75);
+            --border-color: rgba(255, 255, 255, 0.08);
+            --accent-primary: #00f2fe;
+            --accent-secondary: #4facfe;
+            --text-color: #f3f4f6;
+            --text-muted: #9ca3af;
+            --danger-color: #ef4444;
+            --warning-color: #f59e0b;
+            --success-color: #10b981;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: 'Cairo', 'Outfit', sans-serif;
+            transition: all 0.25s ease;
+        }
+
+        body {
+            background: radial-gradient(circle at top right, #1e1b4b 0%, var(--bg-color) 70%);
+            color: var(--text-color);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow-x: hidden;
+        }
+
+        header {
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1.2rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 10;
+        }
+
+        header h1 {
+            font-size: 1.5rem;
+            font-weight: 900;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .container {
+            display: flex;
+            flex: 1;
+            padding: 1.5rem;
+            gap: 1.5rem;
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+        }
+
+        /* Simulator Dashboard (Left Panel) */
+        .dashboard-panel {
+            flex: 1;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(16px);
+            border-radius: 20px;
+            padding: 1.8rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+        }
+
+        .panel-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+            border-bottom: 2px solid var(--border-color);
+            padding-bottom: 0.8rem;
+            color: var(--accent-primary);
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-group label {
+            font-size: 0.9rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .form-group input[type="text"], .form-group select {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.8rem 1rem;
+            color: var(--text-color);
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .form-group input[type="text"]:focus, .form-group select:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+        }
+
+        .slider-container {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 15px;
+        }
+
+        .slider-container input[type="range"] {
+            flex: 1;
+            accent-color: var(--accent-primary);
+            background: rgba(255, 255, 255, 0.1);
+            height: 6px;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .slider-val {
+            font-weight: 700;
+            color: var(--accent-secondary);
+            min-width: 60px;
+            text-align: left;
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            background: rgba(239, 68, 68, 0.08);
+            border: 1px dashed rgba(239, 68, 68, 0.3);
+            border-radius: 10px;
+            padding: 1rem;
+            cursor: pointer;
+        }
+
+        .checkbox-group input {
+            width: 18px;
+            height: 18px;
+            accent-color: var(--danger-color);
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            color: var(--danger-color);
+            font-weight: 700;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+
+        /* Chat Panel (Right Panel) */
+        .chat-panel {
+            flex: 2;
+            background: var(--panel-bg);
+            border: 1px solid var(--border-color);
+            backdrop-filter: blur(16px);
+            border-radius: 20px;
+            display: flex;
+            flex-direction: column;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+            overflow: hidden;
+            height: 80vh;
+        }
+
+        .chat-header {
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid var(--border-color);
+            padding: 1rem 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .avatar {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.4rem;
+            font-weight: bold;
+            box-shadow: 0 0 15px rgba(0, 242, 254, 0.3);
+        }
+
+        .bot-info {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .bot-name {
+            font-weight: 700;
+            font-size: 1.05rem;
+        }
+
+        .bot-status {
+            font-size: 0.8rem;
+            color: var(--success-color);
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .bot-status::before {
+            content: "";
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            background: var(--success-color);
+            border-radius: 50%;
+            animation: pulse 1.5s infinite;
+        }
+
+        .chat-messages {
+            flex: 1;
+            padding: 1.5rem;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.2rem;
+            scroll-behavior: smooth;
+        }
+
+        /* Message Bubbles */
+        .msg-row {
+            display: flex;
+            width: 100%;
+        }
+
+        .msg-row.user-row {
+            justify-content: flex-start;
+        }
+
+        .msg-row.bot-row {
+            justify-content: flex-end;
+        }
+
+        .bubble {
+            max-width: 80%;
+            padding: 1rem 1.2rem;
+            border-radius: 18px;
+            font-size: 0.95rem;
+            line-height: 1.6;
+            position: relative;
+            animation: slideUp 0.3s ease;
+            white-space: pre-line;
+        }
+
+        .user-row .bubble {
+            background: linear-gradient(135deg, var(--accent-secondary), #3b82f6);
+            color: #fff;
+            border-bottom-right-radius: 4px;
+            box-shadow: 0 4px 15px rgba(59, 130, 246, 0.25);
+        }
+
+        .bot-row .bubble {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            color: var(--text-color);
+            border-bottom-left-radius: 4px;
+        }
+
+        /* Extra tags inside bot bubble */
+        .bubble-meta {
+            margin-top: 0.6rem;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: flex;
+            gap: 12px;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            padding-top: 0.4rem;
+        }
+
+        .tag-intent {
+            color: var(--accent-primary);
+            font-weight: 700;
+        }
+
+        /* Input Area */
+        .chat-input-area {
+            padding: 1.2rem 1.5rem;
+            background: rgba(255, 255, 255, 0.01);
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            gap: 10px;
+        }
+
+        .chat-input-area input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.9rem 1.2rem;
+            color: var(--text-color);
+            outline: none;
+            font-size: 1rem;
+        }
+
+        .chat-input-area input:focus {
+            border-color: var(--accent-primary);
+            box-shadow: 0 0 10px rgba(0, 242, 254, 0.15);
+        }
+
+        .chat-input-area button {
+            background: linear-gradient(135deg, var(--accent-primary), var(--accent-secondary));
+            border: none;
+            border-radius: 12px;
+            padding: 0 1.8rem;
+            color: #0b0f19;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 242, 254, 0.25);
+        }
+
+        .chat-input-area button:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 242, 254, 0.4);
+        }
+
+        /* Typing Indicator */
+        .typing-bubble {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            padding: 0.8rem 1.2rem;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 18px;
+            width: fit-content;
+            animation: pulse 1.5s infinite;
+        }
+
+        .dot {
+            width: 7px;
+            height: 7px;
+            background: var(--accent-primary);
+            border-radius: 50%;
+            animation: bounce 1.3s infinite;
+        }
+
+        .dot:nth-child(2) { animation-delay: 0.15s; }
+        .dot:nth-child(3) { animation-delay: 0.3s; }
+
+        @keyframes bounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-6px); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; }
+        }
+
+        @keyframes slideUp {
+            from { transform: translateY(15px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+
+        /* Responsive */
+        @media (max-width: 900px) {
+            .container {
+                flex-direction: column;
+            }
+            .chat-panel {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>♿ Chairpal AI Assistant — محاكي ذكي متكامل</h1>
+        <div style="font-size: 0.85rem; color: var(--text-muted); font-weight: bold;">
+            FastText Engine: <span style="color: var(--accent-primary);">99.83% Accuracy</span>
+        </div>
+    </header>
+
+    <div class="container">
+        
+        <!-- Left: Simulator Dashboard -->
+        <div class="dashboard-panel">
+            <h2 class="panel-title">📊 لوحة محاكاة قراءات الكرسي (Simulator)</h2>
+            
+            <div class="form-group">
+                <label for="user-name">👤 اسم المستخدم (User Name)</label>
+                <input type="text" id="user-name" value="أحمد" placeholder="أدخل اسم المريض...">
+            </div>
+
+            <div class="form-group">
+                <label>❤️ معدل نبضات القلب (Heart Rate)</label>
+                <div class="slider-container">
+                    <input type="range" id="heart-rate" min="50" max="140" value="75" oninput="updateVal('heart-rate-val', this.value)">
+                    <span class="slider-val" id="heart-rate-val">75 bpm</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>🌡️ درجة حرارة الجسم (Body Temp)</label>
+                <div class="slider-container">
+                    <input type="range" id="temp" min="35.5" max="39.5" step="0.1" value="37.0" oninput="updateVal('temp-val', this.value + ' °C')">
+                    <span class="slider-val" id="temp-val">37.0 °C</span>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="movement">🏃 مستويات النشاط والحركة (Activity)</label>
+                <select id="movement">
+                    <option value="active">نشطة وممتازة (Active)</option>
+                    <option value="medium">معتدلة (Medium)</option>
+                    <option value="low">منخفضة / جلوس طويل (Low)</option>
+                </select>
+            </div>
+
+            <div class="checkbox-group" id="fainting-card">
+                <input type="checkbox" id="fainting">
+                <label for="fainting">🚨 محاكاة حالة سقوط مفاجئ أو إغماء (MPU Fainting)</label>
+            </div>
+        </div>
+
+        <!-- Right: Chat Area -->
+        <div class="chat-panel">
+            <div class="chat-header">
+                <div class="avatar">🤖</div>
+                <div class="bot-info">
+                    <span class="bot-name">شات بوت Chairpal الذكي</span>
+                    <span class="bot-status">نشط ومستعد للمساعدة</span>
+                </div>
+            </div>
+
+            <div class="chat-messages" id="chat-messages">
+                <!-- Bot Welcome Message -->
+                <div class="msg-row bot-row">
+                    <div class="bubble">
+                        أهلاً بك في نظام دعم Chairpal الذكي! ♿✨
+                        أنا متصل بحساسات كرسيّك لمراقبة حالتك وصحتك ومساعدتك في الملاحة والتحكم.
+                        
+                        كيف يمكنني مساعدتك اليوم؟ (جرب سؤالي عن صحتك أو الحساسات أو التعب).
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="اكتب سؤالك هنا..." onkeydown="if(event.key === 'Enter') sendMessage()">
+                <button onclick="sendMessage()">إرسال</button>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        function updateVal(id, val) {
+            document.getElementById(id).innerText = val;
+        }
+
+        function appendMessage(text, isUser, meta = null) {
+            const chatMessages = document.getElementById("chat-messages");
+            
+            const msgRow = document.createElement("div");
+            msgRow.className = `msg-row ${isUser ? 'user-row' : 'bot-row'}`;
+            
+            const bubble = document.createElement("div");
+            bubble.className = "bubble";
+            bubble.innerText = text;
+            
+            if (meta) {
+                const metaDiv = document.createElement("div");
+                metaDiv.className = "bubble-meta";
+                metaDiv.innerHTML = `
+                    <span>النية المكتشفة: <span class="tag-intent">${meta.intent}</span></span>
+                    <span>الثقة: ${(meta.confidence * 100).toFixed(1)}%</span>
+                `;
+                bubble.appendChild(metaDiv);
+            }
+            
+            msgRow.appendChild(bubble);
+            chatMessages.appendChild(msgRow);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function showTypingIndicator() {
+            const chatMessages = document.getElementById("chat-messages");
+            const div = document.createElement("div");
+            div.id = "typing-indicator";
+            div.className = "msg-row bot-row";
+            div.innerHTML = `
+                <div class="typing-bubble">
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                    <div class="dot"></div>
+                </div>
+            `;
+            chatMessages.appendChild(div);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+
+        function removeTypingIndicator() {
+            const el = document.getElementById("typing-indicator");
+            if (el) el.remove();
+        }
+
+        async function sendMessage() {
+            const inputEl = document.getElementById("chat-input");
+            const query = inputEl.value.trim();
+            if (!query) return;
+            
+            // Clear input
+            inputEl.value = "";
+            
+            // Append User Message
+            appendMessage(query, true);
+            
+            // Show bot typing
+            showTypingIndicator();
+            
+            // Collect Simulator Parameters
+            const userName = document.getElementById("user-name").value;
+            const heartRate = parseFloat(document.getElementById("heart-rate").value);
+            const temp = parseFloat(document.getElementById("temp").value);
+            const movement = document.getElementById("movement").value;
+            const fainting = document.getElementById("fainting").checked;
+            
+            const requestPayload = {
+                message: query,
+                user_id: "simulator_user",
+                user_name: userName,
+                battery_level: 85.0,
+                sensor_data: {
+                    heart_rate: heartRate,
+                    temperature: temp,
+                    movement: movement,
+                    mpu_status: fainting ? "fainting_detected" : "normal"
+                }
+            };
+            
+            try {
+                const response = await fetch("/chat", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify(requestPayload)
+                });
+                
+                const data = await response.json();
+                removeTypingIndicator();
+                
+                if (data.response) {
+                    appendMessage(data.response, false, {
+                        intent: data.intent,
+                        confidence: data.confidence
+                    });
+                } else {
+                    appendMessage("حدث خطأ في الاتصال بالنموذج.", false);
+                }
+            } catch (err) {
+                removeTypingIndicator();
+                appendMessage("عذراً، فشل الاتصال بخادم الشات بوت المحلي. تأكد من تشغيل server FastAPI.", false);
+                console.error(err);
+            }
+        }
+    </script>
+</body>
+</html>
