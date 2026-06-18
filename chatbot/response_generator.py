@@ -108,37 +108,7 @@ class ResponseGenerator:
         # Override intent to bot_identity for clear identity/project/app queries
         query_norm = normalize_arabic(cleaned_query.lower())
         
-        # 1. Intercept slow wheelchair queries
-        slow_keywords_ar = ["بطيء", "بطيئ", "مش راضي يتحرك", "مش بيتحرك", "واقف مش بيتحرك", "حركته بطيئه"]
-        slow_keywords_en = ["slow", "not moving", "stopped moving", "won't move", "won't drive"]
-        is_slow_query = any(kw in query_norm for kw in slow_keywords_ar) or any(kw in query_norm for kw in slow_keywords_en)
-        if is_slow_query:
-            if detected_language == "ar":
-                ans = "لو الكرسي مش بيتحرك أو بطيء، اتأكد الأول إن البطارية مش فاضية، وإن الكرسي مش على وضع الـ (Manual Freewheel)."
-            else:
-                ans = "If the wheelchair is not moving or is moving slow, first ensure that the battery is not empty and that the chair is not in Manual Freewheel mode."
-            ans = self._inject_context(ans, "wheelchair_usage", detected_language, user_context)
-            return ans.replace("***", "").replace("**", "").replace("*", "")
-
-        # 2. Intercept obstacle avoidance / autonomous navigation queries
-        obstacle_phrases_ar = ["تفادي العقبات", "يتفادى العقبات", "تجنب الاصطدام", "يمشي لوحده", "التوجيه الذاتي", "الملاحة الذاتية", "تفادي العوائق", "بيمشي لوحده", "يتفادى عقبات"]
-        obstacle_phrases_en = ["avoid obstacles", "obstacle avoidance", "autonomous navigation", "drive itself", "self driving", "steer itself", "does it navigate", "navigate itself"]
-        is_obstacle_query = any(phrase in query_norm for phrase in obstacle_phrases_ar) or any(phrase in query_norm for phrase in obstacle_phrases_en)
-        if is_obstacle_query:
-            if detected_language == "ar":
-                ans = (
-                    "الكرسي بيتفادى العقبات ذاتياً بالاعتماد على نظام ذكي متكامل:\n"
-                    "1. مستشعرات الـ Lidar وحساسات الموجات فوق الصوتية (Ultrasonic): متثبتة في الكرسي عشان ترصد أي عقبات مفاجئة في كل الاتجاهات باستمرار.\n"
-                    "2. خوارزمية A* (A-Star): بتستخدمها وحدة التحكم لحساب أقصر وأأمن مسار لتفادي العقبة تلقائياً والوصول للهدف بأمان."
-                )
-            else:
-                ans = (
-                    "The wheelchair avoids obstacles autonomously using an integrated smart system:\n"
-                    "1. Lidar and Ultrasonic Sensors: Mounted on the wheelchair to continuously detect sudden obstacles in all directions.\n"
-                    "2. A* (A-Star) Algorithm: Used by the microcontroller to calculate the shortest and safest path to automatically avoid the obstacle and reach the destination safely."
-                )
-            ans = self._inject_context(ans, "navigation", detected_language, user_context)
-            return ans.replace("***", "").replace("**", "").replace("*", "")
+        # (Slow queries and obstacle avoidance are now handled natively via intent classification)
 
         # (Nutrition, Exercise, and Stairs queries are now handled natively via intent classification)
 
@@ -162,14 +132,21 @@ class ResponseGenerator:
         if is_bot_query or is_project_query or is_app_query:
             intent = "bot_identity"
 
-        # 4. Intercept greeting queries to provide a warm and simple welcome instead of full description
-        if intent == "greeting":
+        if intent == "caregiver_info":
+            relations = user_context.get("relations", {}) if user_context else {}
+            doctor = relations.get("doctor", {})
+            companions = relations.get("companions", [])
+            
+            doc_name = doctor.get("name", "غير مسجل")
+            doc_phone = doctor.get("phone", "غير مسجل")
+            
             if detected_language == "ar":
-                ans = "أهلاً بك! يسعدني التحدث معك، كيف يمكنني مساعدتك اليوم؟ ♿✨"
+                comps_str = "\n".join([f"- {c.get('name', 'غير مسجل')}: {c.get('phone', 'غير مسجل')}" for c in companions]) if companions else "لا يوجد مرافقين مسجلين"
+                final_answer = f"👨‍⚕️ الطبيب المعالج: {doc_name} (تليفون: {doc_phone})\n👥 المرافقين المسجلين:\n{comps_str}"
             else:
-                ans = "Hello! Great to chat with you. How can I help you today? ♿✨"
-            ans = self._inject_context(ans, "greeting", detected_language, user_context)
-            return ans.replace("***", "").replace("**", "").replace("*", "")
+                comps_str = "\n".join([f"- {c.get('name', 'Not registered')}: {c.get('phone', 'Not registered')}" for c in companions]) if companions else "No registered companions"
+                final_answer = f"👨‍⚕️ Doctor: {doc_name} (Phone: {doc_phone})\n👥 Companions:\n{comps_str}"
+            return final_answer
 
         # 1. Handle Fallback
         if intent == "fallback" or intent not in self.intent_map:
@@ -215,11 +192,15 @@ class ResponseGenerator:
                     query_embedding = self.semantic_model.encode([filtered_query], convert_to_numpy=True)
                     
                     # Fetch precomputed embeddings if available
-                    candidate_embeddings = None
-                    if hasattr(self, "candidate_embeddings") and intent in self.candidate_embeddings and detected_language in self.candidate_embeddings[intent]:
-                        candidate_embeddings = self.candidate_embeddings[intent][detected_language]
+                    candidate_embeddings_list = []
+                    for l in target_langs:
+                        if hasattr(self, "candidate_embeddings") and intent in self.candidate_embeddings and l in self.candidate_embeddings[intent]:
+                            # Extend list with precomputed numpy arrays converted back to lists for concatenation
+                            candidate_embeddings_list.extend(list(self.candidate_embeddings[intent][l]))
                     
-                    if candidate_embeddings is None:
+                    if candidate_embeddings_list and len(candidate_embeddings_list) == len(candidates):
+                        candidate_embeddings = np.array(candidate_embeddings_list)
+                    else:
                         # Fallback to encoding on the fly
                         candidate_questions = [c["question"] for c in candidates]
                         candidate_embeddings = self.semantic_model.encode(candidate_questions, convert_to_numpy=True)
@@ -235,7 +216,7 @@ class ResponseGenerator:
                     best_score = sims[best_idx]
                     
                     # Similarity Threshold
-                    SIMILARITY_THRESHOLD = 0.55
+                    SIMILARITY_THRESHOLD = 0.40
                     if best_score < SIMILARITY_THRESHOLD:
                         print(f"Low similarity {best_score:.3f} for: {filtered_query}")
                         return self.fallback_answers.get(detected_language, self.fallback_answers["ar"])
@@ -280,46 +261,34 @@ class ResponseGenerator:
             
             # Special handling for custom intents
             if intent == "wheelchair_stop_reason":
-                obstacle_detected = False
-                obstacle_distance = 0.0
-                nav_env = user_context.get("navigation_environment", {}) if user_context else {}
-                if isinstance(nav_env, dict) and nav_env:
-                    obs_det = nav_env.get("obstacle_detection", {}) or {}
-                    obstacle_detected = obs_det.get("obstacle_detected", False)
-                    obstacle_distance = obs_det.get("obstacle_distance_cm", 0.0)
-                    
-                emergency_data = user_context.get("emergency", {}) if user_context else {}
-                emergency_active = False
+                alerts = user_context.get("latest_alerts", {}) if user_context else {}
+                health_state = user_context.get("current_health_state", {}) if user_context else {}
+                
+                obstacle_alert = alerts.get("obstacle")
+                obstacle_detected = bool(obstacle_alert)
+                obstacle_distance = 0.0 # Distances might not be in the new schema, default to 0
+                
+                sos_alert = alerts.get("sos")
+                fall_alert = alerts.get("mpu_monitoring")
+                heart_alert = alerts.get("heart")
+                
+                emergency_active = bool(sos_alert or fall_alert or heart_alert)
                 emergency_type = ""
-                if isinstance(emergency_data, dict) and emergency_data:
-                    emergency_active = emergency_data.get("active", False)
-                    emergency_type = emergency_data.get("emergency_type", "")
+                if sos_alert:
+                    emergency_type = "manual_emergency_stop"
+                elif fall_alert:
+                    emergency_type = "fall_detected"
+                elif heart_alert:
+                    emergency_type = "health_risk"
+                elif obstacle_alert:
+                    emergency_type = "collision_risk"
                     
-                health_data = user_context.get("health", {}) if user_context else {}
-                heart_rate = 75.0
-                temperature = 37.0
-                abnormal_posture = False
-                if isinstance(health_data, dict) and health_data:
-                    hr_data = health_data.get("heart_rate", {}) or {}
-                    heart_rate = hr_data.get("value", 75.0)
-                    temp_data = health_data.get("temperature", {}) or {}
-                    temperature = temp_data.get("value", 37.0)
-                    mpu_data = health_data.get("mpu_monitoring", {}) or {}
-                    abnormal_posture = mpu_data.get("abnormal_posture_detected", False)
-                else:
-                    legacy_sensors = user_context.get("sensor_data", {}) if user_context else {}
-                    if legacy_sensors:
-                        heart_rate = legacy_sensors.get("heart_rate", 75.0)
-                        temperature = legacy_sensors.get("temperature", 37.0)
-                        mpu_status = legacy_sensors.get("mpu_status", "normal")
-                        abnormal_posture = (mpu_status == "fainting_detected")
-                        
-                battery_pct = 100.0
-                wheelchair_data = user_context.get("wheelchair", {}) if user_context else {}
-                if isinstance(wheelchair_data, dict) and wheelchair_data:
-                    battery_pct = wheelchair_data.get("battery_percentage", 100.0)
-                else:
-                    battery_pct = user_context.get("battery_level", 100.0) if user_context else 100.0
+                hr_raw = health_state.get("heart_rate")
+                heart_rate = float(hr_raw) if hr_raw is not None else None
+                temp_raw = health_state.get("temperature")
+                temperature = float(temp_raw) if temp_raw is not None else None
+                mpu_data = health_state.get("mpu_monitoring", {}) or {}
+                abnormal_posture = mpu_data.get("fall_detected", False) or (mpu_data.get("fainting_risk") == "high")
                     
                 # Formulate response
                 if detected_language == "ar":
@@ -328,11 +297,11 @@ class ResponseGenerator:
                             final_answer = f"الكرسي وقف تلقائياً لتفادي الاصطدام بوجود عائق قدامه على مسافة {obstacle_distance} سم."
                         elif emergency_type == "health_risk":
                             posture_str = " مع وضعية جلوس غير مريحة" if abnormal_posture else ""
-                            final_answer = f"الكرسي وقف تلقائياً كإجراء أمان عشان رصدنا حالة تعب: نبضات قلبك مرتفعة ({heart_rate} نبضة/دقيقة) وحرارتك ({temperature}°م){posture_str}. بننصحك بالاستراحة فوراً."
+                            hr_display = f"{heart_rate} نبضة/دقيقة" if heart_rate is not None else "غير متاحة"
+                            temp_display = f"{temperature}°م" if temperature is not None else "غير متاحة"
+                            final_answer = f"الكرسي وقف تلقائياً كإجراء أمان عشان رصدنا حالة تعب: نبضات قلبك ({hr_display}) وحرارتك ({temp_display}){posture_str}. بننصحك بالاستراحة فوراً."
                         elif emergency_type == "fall_detected":
                             final_answer = "تنبيه طارئ: تم رصد حالة سقوط مفاجئ للكرسي! تم إرسال استغاثة طوارئ لجهات الاتصال الموثوقة فوراً لتأمين سلامتك."
-                        elif emergency_type == "battery_critical":
-                            final_answer = f"الكرسي وقف بسبب انخفاض مستوى البطارية الحرج ({battery_pct}%). يرجى شحن الكرسي فوراً."
                         elif emergency_type == "manual_emergency_stop":
                             final_answer = "تم تفعيل التوقف الطارئ اليدوي للكرسي. للبدء مجدداً، تأكد من تحرير زر الطوارئ."
                         else:
@@ -342,8 +311,6 @@ class ResponseGenerator:
                                 final_answer = "تم إيقاف الكرسي كإجراء أمان طارئ. يرجى مراجعة التطبيق لمعرفة تفاصيل التنبيه."
                     elif obstacle_detected:
                         final_answer = f"الكرسي وقف تلقائياً لوجود عائق على مسافة {obstacle_distance} سم."
-                    elif battery_pct < 20:
-                        final_answer = f"الكرسي وقف بسبب ضعف شحن البطارية الحرج ({battery_pct}%)."
                     else:
                         final_answer = "الكرسي واقف حالياً وفي حالة استعداد. يمكنك توجيهه من خلال التطبيق أو الجويستيك."
                 else:
@@ -352,11 +319,11 @@ class ResponseGenerator:
                             final_answer = f"The wheelchair stopped automatically to avoid a collision because an obstacle was detected in front of it at a distance of {obstacle_distance} cm."
                         elif emergency_type == "health_risk":
                             posture_str = " with an abnormal sitting posture" if abnormal_posture else ""
-                            final_answer = f"The wheelchair stopped automatically as a safety measure because we detected: high heart rate ({heart_rate} bpm) and temperature ({temperature}°C){posture_str}. We advise you to rest immediately."
+                            hr_display = f"{heart_rate} bpm" if heart_rate is not None else "unavailable"
+                            temp_display = f"{temperature}°C" if temperature is not None else "unavailable"
+                            final_answer = f"The wheelchair stopped automatically as a safety measure because we detected: heart rate ({hr_display}) and temperature ({temp_display}){posture_str}. We advise you to rest immediately."
                         elif emergency_type == "fall_detected":
                             final_answer = "Emergency alert: A sudden wheelchair fall was detected! An emergency SOS has been sent to your caregivers immediately to ensure your safety."
-                        elif emergency_type == "battery_critical":
-                            final_answer = f"The wheelchair stopped due to a critical battery level ({battery_pct}%). Please charge it immediately."
                         elif emergency_type == "manual_emergency_stop":
                             final_answer = "The manual emergency stop has been triggered. To start again, ensure the emergency button is released."
                         else:
@@ -366,106 +333,29 @@ class ResponseGenerator:
                                 final_answer = "The wheelchair has been stopped due to an emergency. Please check the app for alert details."
                     elif obstacle_detected:
                         final_answer = f"The wheelchair stopped automatically because an obstacle was detected at a distance of {obstacle_distance} cm."
-                    elif battery_pct < 20:
-                        final_answer = f"The wheelchair stopped due to a low battery ({battery_pct}%)."
                     else:
                         final_answer = "The wheelchair is currently stopped and in idle mode. You can move it using the app or joystick."
-            elif intent == "connect_wheelchair":
-                if detected_language == "ar":
-                    final_answer = (
-                        "لربط الكرسي المتحرك بالتطبيق، اتبع الخطوات التالية:\n"
-                        "1. تأكد من تشغيل الواي فاي (Wi-Fi) والموقع (Location) على هاتفك.\n"
-                        "2. شغل الكرسي المتحرك من خلال زر التشغيل الرئيسي.\n"
-                        "3. افتح تطبيق Chairpal واذهب إلى الإعدادات ثم 'ربط الكرسي'.\n"
-                        "4. سيبدأ التطبيق بالبحث عن الكرسي، اضغط عليه لعمل اقتران (Pairing).\n"
-                        "5. بمجرد الاتصال، ستظهر لك علامة الاتصال باللون الأخضر وتبدأ قراءات الحساسات بالظهور."
-                    )
-                else:
-                    final_answer = (
-                        "To connect the wheelchair to the app, follow these steps:\n"
-                        "1. Make sure Wi-Fi and Location are enabled on your phone.\n"
-                        "2. Turn on the wheelchair using the main power button.\n"
-                        "3. Open the Chairpal app, go to Settings, and select 'Connect Wheelchair'.\n"
-                        "4. The app will search for the wheelchair, tap on it to pair.\n"
-                        "5. Once connected, a green status indicator will appear and sensor readings will start displaying."
-                    )
-            elif intent == "bot_identity":
-                query_norm = normalize_arabic(cleaned_query.lower())
-                
-                app_keywords = ["تطبيق", "ابلكيشن", "موبيل", "موبايل", "برنامج", "ميزه", "مميز", "خاصي", "وظيف", "app", "applic", "feature"]
-                project_keywords = ["مشروع", "فكر", "project", "idea", "concept"]
-                
-                query_words = re.sub(r'[^\w\s]', ' ', query_norm).split()
-                
-                has_app = any(any(kw in w for kw in app_keywords) for w in query_words)
-                has_project = any(any(kw in w for kw in project_keywords) for w in query_words)
-                
-                if has_app:
-                    if detected_language == "ar":
-                        final_answer = (
-                            "تطبيق Chairpal الذكي بيوفرلك كذا ميزة أساسية لمساعدتك:\n"
-                            "1. مراقبة المؤشرات الحيوية: بتابع نبضات قلبك وحرارتك باستمرار من حساسات الكرسي.\n"
-                            "2. رصد حالات السقوط (MPU): لو حصل أي سقوط مفاجئ، برسل تنبيه طوارئ SOS فوراً لجهات اتصالك.\n"
-                            "3. التحكم بالكرسي: تقدر تتحرك يدوي بالجويستيك، لاسلكي بالواي فاي، أو توجيه ذاتي لتفادي العقبات."
-                        )
-                    else:
-                        final_answer = (
-                            "The Chairpal mobile app offers several key features:\n"
-                            "1. Vital Signs Monitoring: Tracks your heart rate and body temperature continuously via wheelchair sensors.\n"
-                            "2. Fall Detection (MPU): Sends immediate SOS alerts to emergency contacts in case of a fall.\n"
-                            "3. Wheelchair Control: Supports manual joystick control, wireless Wi-Fi control, and autonomous navigation to avoid obstacles."
-                        )
-                elif has_project:
-                    if detected_language == "ar":
-                        final_answer = (
-                            "مشروع Chairpal هو دمج الذكاء الاصطناعي مع الكراسي المتحركة الكهربائية لتوفير استقلالية وأمان كامل لمستخدمي الكراسي المتحركة. المشروع بيربط الكرسي بتطبيق موبايل وحساسات ذكية."
-                        )
-                    else:
-                        final_answer = (
-                            "The Chairpal project integrates artificial intelligence with electric wheelchairs to provide full independence and safety for wheelchair users by connecting the wheelchair to a mobile app and smart sensors."
-                        )
-                else:
-                    # Default Bot Identity response (chatbot identity & what it does, no project idea)
-                    if detected_language == "ar":
-                        final_answer = (
-                            "أنا مساعد Chairpal الذكي! ♿✨ أنا متصل بحساسات كرسيّك لمراقبة حالتك وصحتك ومساعدتك في الملاحة والتحكم وتنبيهك في حالات الطوارئ."
-                        )
-                    else:
-                        final_answer = (
-                            "I am the Chairpal Smart Assistant! ♿✨ I am connected to your wheelchair's sensors to monitor your health, assist you with navigation and control, and alert you in emergencies."
-                        )
+            # Other static intents like connect_wheelchair and bot_identity have been removed to rely on dataset
             
         # 4. Personalization & Dynamic Sensor Injection
         final_answer = self._inject_context(final_answer, intent, detected_language, user_context)
         
         # 4.1 Trip Information Integration (Destination & Status)
         if intent in {"wheelchair_stop_reason", "navigation"} and user_context:
-            trip_data = user_context.get("trip", {})
-            if isinstance(trip_data, dict) and trip_data.get("active_trip", False):
-                dest_data = trip_data.get("destination", {})
-                dest_name = dest_data.get("name", "")
-                dest_category = dest_data.get("category", "")
-                floor_name = dest_data.get("floor", {}).get("name", "") if isinstance(dest_data.get("floor"), dict) else ""
-                trip_status = trip_data.get("trip_status", "paused")
+            trip_data = user_context.get("current_trip", {})
+            if isinstance(trip_data, dict) and trip_data.get("is_active", False):
+                dest_name = trip_data.get("destination", "غير معروف")
                 
                 if detected_language == "ar":
-                    status_map = {
-                        "moving": "جاري الحركة",
-                        "paused": "متوقفة مؤقتاً",
-                        "completed": "مكتملة",
-                        "cancelled": "ملغاة",
-                        "emergency_stopped": "متوقفة اضطرارياً للطوارئ"
-                    }
-                    trip_status_ar = status_map.get(trip_status, trip_status)
-                    trip_info = f"\n\n📍 بخصوص رحلتكِ الحالية إلى {dest_name} ({dest_category}) في {floor_name}، فهي حالياً {trip_status_ar}."
+                    trip_info = f"\n\n📍 بخصوص رحلتك الحالية إلى {dest_name}، فهي جارية الآن."
                 else:
-                    trip_info = f"\n\n📍 Regarding your current trip to {dest_name} ({dest_category}) on {floor_name}, it is currently {trip_status}."
+                    trip_info = f"\n\n📍 Regarding your current trip to {dest_name}, it is currently active."
                 
                 final_answer += trip_info
 
         # 4.2 Arabic Gender-Awareness / Feminization
         if detected_language == "ar" and user_context:
-            user_data = user_context.get("user", {})
+            user_data = user_context.get("user_profile", {})
             gender = None
             if isinstance(user_data, dict):
                 gender = user_data.get("gender")
@@ -481,7 +371,14 @@ class ResponseGenerator:
         if not user_context:
             return answer
             
-        name = user_context.get("name")
+        profile = user_context.get("user_profile", {})
+        name = profile.get("name")
+        
+        relations = user_context.get("relations", {})
+        doctor = relations.get("doctor", {})
+        doc_name = doctor.get("name", "طبيبك")
+        companions = relations.get("companions", [])
+        comp_names = " و ".join([c.get("name", "") for c in companions]) if companions else "جهات الاتصال"
         
         # B. Inject Sensor Readings & Warnings
         health_intents = {"sensor_interpretation", "fatigue", "pain", "shortness_of_breath", "normal_health"}
@@ -489,114 +386,108 @@ class ResponseGenerator:
         warning_str = ""
         metrics_block = ""
         
-        # Extract variables from user_context (supporting both nested and flat schemas)
-        heart_rate = 75.0
-        temperature = 37.0
-        movement = "active"
-        mpu_status = "normal"
+        # Extract variables from user_context
+        heart_rate = None
+        temperature = None
+        mpu_status = None
         
-        health_data = user_context.get("health", {})
+        health_data = user_context.get("current_health_state", {})
+        alerts = user_context.get("latest_alerts", {})
+        
         if isinstance(health_data, dict) and health_data:
-            hr_data = health_data.get("heart_rate", {}) or {}
-            hr_raw = hr_data.get("value", 75.0)
-            heart_rate = float(hr_raw) if hr_raw is not None else 75.0
-            temp_data = health_data.get("temperature", {}) or {}
-            temp_raw = temp_data.get("value", 37.0)
-            temperature = float(temp_raw) if temp_raw is not None else 37.0
+            hr_raw = health_data.get("heart_rate")
+            heart_rate = float(hr_raw) if hr_raw is not None else None
+            temp_raw = health_data.get("temperature")
+            temperature = float(temp_raw) if temp_raw is not None else None
             mpu_data = health_data.get("mpu_monitoring", {}) or {}
-            if mpu_data.get("abnormal_posture_detected", False) or mpu_data.get("fall_risk_detected", False):
+            if mpu_data.get("fall_detected", False) or mpu_data.get("fainting_risk") == "high":
                 mpu_status = "fainting_detected"
-        else:
-            legacy_sensors = user_context.get("sensor_data", {})
-            if isinstance(legacy_sensors, dict) and legacy_sensors:
-                hr_raw = legacy_sensors.get("heart_rate", 75.0)
-                heart_rate = float(hr_raw) if hr_raw is not None else 75.0
-                temp_raw = legacy_sensors.get("temperature", 37.0)
-                temperature = float(temp_raw) if temp_raw is not None else 37.0
-                movement = legacy_sensors.get("movement", "active")
-                mpu_status = legacy_sensors.get("mpu_status", "normal")
                 
-        has_sensors = bool(user_context.get("health") or user_context.get("sensor_data"))
+        if alerts.get("mpu_monitoring") or alerts.get("sos"):
+            mpu_status = "fainting_detected" # Treat SOS/Fall as fainting for warning
+            
+        has_sensors = bool(health_data)
         
-        if intent in health_intents and has_sensors:
+        if intent in health_intents:
             
-            # Load thresholds from config
-            import json
-            import os
-            config_path = "config/health_thresholds.json"
-            thresholds = {
-                "heart_rate_high": 100.0,
-                "heart_rate_low": 50.0,
-                "temperature_high": 38.0,
-                "temperature_low": 35.5,
-                "battery_critical": 20.0
-            }
-            if os.path.exists(config_path):
-                try:
-                    with open(config_path, "r", encoding="utf-8") as f:
-                        thresholds.update(json.load(f))
-                except Exception as e:
-                    pass
-
-            # Determine warnings with non-assertive medical language
-            has_warning = False
-            if mpu_status == "fainting_detected":
-                has_warning = True
-                warning_str = "🚨 تنبيه طارئ: تم رصد ما قد يشير لحالة سقوط مفاجئ! سيتم إرسال استغاثة طوارئ فوراً لجهات اتصالك للمساعدة." if lang == "ar" else "🚨 Emergency alert: A potential fall has been detected! An SOS alert is being sent to your emergency contacts."
-            elif heart_rate > thresholds["heart_rate_high"]:
-                has_warning = True
-                warning_str = f"⚠️ تنبيه: يُلاحظ من القراءات ارتفاع في معدل نبضات القلب ({heart_rate} نبضة/دقيقة). قد تشير هذه القراءات إلى حاجتك للراحة." if lang == "ar" else f"⚠️ Alert: Readings suggest an elevated heart rate ({heart_rate} bpm). You may need to rest."
-            elif heart_rate < thresholds["heart_rate_low"]:
-                has_warning = True
-                warning_str = f"⚠️ تنبيه: يُلاحظ انخفاض في معدل نبضات القلب ({heart_rate} نبضة/دقيقة). قد تشير بعض القراءات إلى تغيرات تستدعي الانتباه الطبي." if lang == "ar" else f"⚠️ Alert: Readings suggest a low heart rate ({heart_rate} bpm). We advise consulting a doctor."
-            elif temperature > thresholds["temperature_high"]:
-                has_warning = True
-                warning_str = f"⚠️ تنبيه: يُلاحظ ارتفاع في درجة حرارة الجسم ({temperature}°م). يرجى شرب المياة والاستراحة." if lang == "ar" else f"⚠️ Alert: Readings suggest a high body temperature ({temperature}°C). Please stay hydrated."
-            elif temperature < thresholds["temperature_low"]:
-                has_warning = True
-                warning_str = f"⚠️ تنبيه: يُلاحظ انخفاض في درجة حرارة الجسم ({temperature}°م). يرجى التدفئة." if lang == "ar" else f"⚠️ Alert: Readings suggest a low body temperature ({temperature}°C). Please warm up."
-                
-            # If warning is active, override positive answers that might contradict it
-            if has_warning:
-                if intent == "normal_health":
-                    if lang == "ar":
-                        answer = "مؤشراتك الحيوية فيها بعض الاختلافات وغير مستقرة حالياً. يرجى الحذر والراحة."
-                    else:
-                        answer = "Your vital signs are showing some unusual readings and are not stable. Please rest and stay safe."
+            # If no sensor data at all for health intents, show unavailability message
+            if not has_sensors:
+                if lang == "ar":
+                    no_sensor_msg = "\n\n📊 قراءات الحساسات الصحية غير متاحة حالياً. تأكد إن الكرسي متصل وإن الحساسات شغالة من التطبيق."
                 else:
-                    pos_ar = "مؤشراتك الحيوية ممتازة وتحت المراقبة المستمرة! نبضات القلب ودرجة الحرارة في المعدلات الطبيعية الآمنة، وجسمك في حالة مستقرة تماماً."
-                    caution_ar = "مؤشراتك الحيوية حالياً تحت المراقبة المستمرة. تم رصد بعض القراءات غير المستقرة التي تتطلب منك الحذر والاستراحة."
-                    if pos_ar in answer:
-                        answer = answer.replace(pos_ar, caution_ar)
-                        
-                    pos_en = "Your vital signs are excellent and under continuous monitoring! Your heart rate and body temperature are within the safe normal ranges, and your overall health status is completely stable."
-                    caution_en = "Your vital signs are currently under continuous monitoring. Some unusual readings have been detected that require caution and rest."
-                    if pos_en in answer:
-                        answer = answer.replace(pos_en, caution_en)
-            
-            # Prepare translation for movement
-            movement_translation = {
-                "low": "منخفضة (بننصحك تغير وضعيتك لتجنب الآلام)" if lang == "ar" else "Low (we advise changing your posture to avoid stiffness)",
-                "medium": "معتدلة" if lang == "ar" else "Medium",
-                "active": "نشطة وممتازة" if lang == "ar" else "Active and excellent"
-            }
-            movement_str = movement_translation.get(movement, movement)
-            
-            # Generate Health Metrics block
-            if lang == "ar":
-                metrics_block = (
-                    f"\n\n📊 قراءات حساساتك الحالية:\n"
-                    f"- نبضات القلب: {heart_rate} نبضة/دقيقة\n"
-                    f"- درجة حرارة الجسم: {temperature}°م\n"
-                    f"- حالة الحركة والنشاط: {movement_str}"
-                )
+                    no_sensor_msg = "\n\n📊 Health sensor readings are currently unavailable. Please ensure the wheelchair is connected and sensors are active via the app."
+                metrics_block = no_sensor_msg
             else:
-                metrics_block = (
-                    f"\n\n📊 Your current sensor readings:\n"
-                    f"- Heart Rate: {heart_rate} bpm\n"
-                    f"- Body Temperature: {temperature}°C\n"
-                    f"- Activity Level: {movement_str}"
-                )
+                # Load thresholds from config
+                import json
+                import os
+                config_path = "config/health_thresholds.json"
+                thresholds = {
+                    "heart_rate_high": 100.0,
+                    "heart_rate_low": 50.0,
+                    "temperature_high": 38.0,
+                    "temperature_low": 35.5
+                }
+                if os.path.exists(config_path):
+                    try:
+                        with open(config_path, "r", encoding="utf-8") as f:
+                            thresholds.update(json.load(f))
+                    except Exception as e:
+                        pass
+
+                # Determine warnings — only when real data exists
+                has_warning = False
+                if mpu_status == "fainting_detected":
+                    has_warning = True
+                    warning_str = f"🚨 تنبيه طارئ: تم رصد ما قد يشير لحالة سقوط مفاجئ! سيتم إرسال استغاثة طوارئ فوراً لـ ({comp_names}) للمساعدة." if lang == "ar" else f"🚨 Emergency alert: A potential fall has been detected! An SOS alert is being sent to your emergency contacts ({comp_names})."
+                elif heart_rate is not None and heart_rate > thresholds["heart_rate_high"]:
+                    has_warning = True
+                    warning_str = f"⚠️ تنبيه: يُلاحظ من القراءات ارتفاع في معدل نبضات القلب ({heart_rate} نبضة/دقيقة). قد تشير هذه القراءات إلى حاجتك للراحة. يرجى المتابعة مع {doc_name}." if lang == "ar" else f"⚠️ Alert: Readings suggest an elevated heart rate ({heart_rate} bpm). You may need to rest. Please consult {doc_name}."
+                elif heart_rate is not None and heart_rate < thresholds["heart_rate_low"]:
+                    has_warning = True
+                    warning_str = f"⚠️ تنبيه: يُلاحظ انخفاض في معدل نبضات القلب ({heart_rate} نبضة/دقيقة). قد تشير بعض القراءات إلى تغيرات تستدعي الانتباه الطبي. تواصل مع {doc_name}." if lang == "ar" else f"⚠️ Alert: Readings suggest a low heart rate ({heart_rate} bpm). We advise consulting {doc_name}."
+                elif temperature is not None and temperature > thresholds["temperature_high"]:
+                    has_warning = True
+                    warning_str = f"⚠️ تنبيه: يُلاحظ ارتفاع في درجة حرارة الجسم ({temperature}°م). يرجى شرب المياة والاستراحة والمتابعة مع {doc_name}." if lang == "ar" else f"⚠️ Alert: Readings suggest a high body temperature ({temperature}°C). Please stay hydrated and consult {doc_name}."
+                elif temperature is not None and temperature < thresholds["temperature_low"]:
+                    has_warning = True
+                    warning_str = f"⚠️ تنبيه: يُلاحظ انخفاض في درجة حرارة الجسم ({temperature}°م). يرجى التدفئة." if lang == "ar" else f"⚠️ Alert: Readings suggest a low body temperature ({temperature}°C). Please warm up."
+                    
+                # If warning is active, override positive answers that might contradict it
+                if has_warning:
+                    if intent == "normal_health":
+                        if lang == "ar":
+                            answer = "مؤشراتك الحيوية فيها بعض الاختلافات وغير مستقرة حالياً. يرجى الحذر والراحة."
+                        else:
+                            answer = "Your vital signs are showing some unusual readings and are not stable. Please rest and stay safe."
+                    else:
+                        pos_ar = "مؤشراتك الحيوية ممتازة وتحت المراقبة المستمرة! نبضات القلب ودرجة الحرارة في المعدلات الطبيعية الآمنة، وجسمك في حالة مستقرة تماماً."
+                        caution_ar = "مؤشراتك الحيوية حالياً تحت المراقبة المستمرة. تم رصد بعض القراءات غير المستقرة التي تتطلب منك الحذر والاستراحة."
+                        if pos_ar in answer:
+                            answer = answer.replace(pos_ar, caution_ar)
+                            
+                        pos_en = "Your vital signs are excellent and under continuous monitoring! Your heart rate and body temperature are within the safe normal ranges, and your overall health status is completely stable."
+                        caution_en = "Your vital signs are currently under continuous monitoring. Some unusual readings have been detected that require caution and rest."
+                        if pos_en in answer:
+                            answer = answer.replace(pos_en, caution_en)
+                
+                # Build metrics block — only show readings that actually exist
+                if lang == "ar":
+                    hr_str = f"{heart_rate} نبضة/دقيقة" if heart_rate is not None else "غير متاحة حالياً"
+                    temp_str = f"{temperature}°م" if temperature is not None else "غير متاحة حالياً"
+                    metrics_block = (
+                        f"\n\n📊 قراءات حساساتك الحالية:\n"
+                        f"- نبضات القلب: {hr_str}\n"
+                        f"- درجة حرارة الجسم: {temp_str}"
+                    )
+                else:
+                    hr_str = f"{heart_rate} bpm" if heart_rate is not None else "Currently unavailable"
+                    temp_str = f"{temperature}°C" if temperature is not None else "Currently unavailable"
+                    metrics_block = (
+                        f"\n\n📊 Your current sensor readings:\n"
+                        f"- Heart Rate: {hr_str}\n"
+                        f"- Body Temperature: {temp_str}"
+                    )
                 
         # A. Prepend Name if available (only for dialogue/supportive intents)
         name_allowed_intents = {"greeting", "thanks", "emotional_support", "pain", "fatigue", "shortness_of_breath", "normal_health"}
@@ -609,8 +500,17 @@ class ResponseGenerator:
                     answer = f"Hello {name}, {answer}"
                     
         # C. Assemble final response: Warning first, then Answer with Name, then Metrics
+        if intent == "sensor_interpretation":
+            if not has_sensors:
+                if lang == "ar":
+                    return "📊 قراءات الحساسات الصحية غير متاحة حالياً. تأكد إن الكرسي متصل وإن الحساسات شغالة من التطبيق."
+                else:
+                    return "📊 Health sensor readings are currently unavailable. Please ensure the wheelchair is connected and sensors are active via the app."
+            else:
+                answer = "" # Discard dataset text if sensors are available
+                
         if warning_str:
-            answer = f"{warning_str}\n\n{answer}"
+            answer = f"{warning_str}\n\n{answer}" if answer else warning_str
             
         if metrics_block:
             answer = f"{answer}{metrics_block}"

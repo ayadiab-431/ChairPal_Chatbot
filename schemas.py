@@ -2,17 +2,16 @@ from pydantic import BaseModel, Field
 from typing import Optional, Dict, Union, List, Literal
 
 class SensorData(BaseModel):
-    heart_rate: Optional[float] = Field(default=75.0, ge=20.0, le=250.0)
-    temperature: Optional[float] = Field(default=37.0, ge=30.0, le=45.0)
-    movement: Optional[Literal["low", "medium", "active"]] = "active"
-    mpu_status: Optional[Literal["normal", "fainting_detected"]] = "normal"
+    heart_rate: Optional[float] = Field(default=None, ge=20.0, le=250.0)
+    temperature: Optional[float] = Field(default=None, ge=30.0, le=45.0)
+    movement: Optional[Literal["low", "medium", "active"]] = None
+    mpu_status: Optional[Literal["normal", "fainting_detected"]] = None
 
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=1000)
     user_id: str = Field(..., min_length=1, max_length=128)
     user_name: Optional[str] = Field(default=None, max_length=120)
     sensor_data: Optional[SensorData] = None
-    battery_level: Optional[float] = Field(default=100.0, ge=0.0, le=100.0)
 
 class MessageModel(BaseModel):
     text: str = Field(..., min_length=1, max_length=1000)
@@ -28,7 +27,6 @@ class WheelchairModel(BaseModel):
     connection_status: Optional[str] = None
     movement_mode: Optional[str] = None
     movement_status: Optional[str] = None
-    battery_percentage: Optional[float] = Field(default=None, ge=0.0, le=100.0)
     speed_kmh: Optional[float] = Field(default=None, ge=0.0, le=25.0)
 
 class LocationCoordinates(BaseModel):

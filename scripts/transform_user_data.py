@@ -47,7 +47,6 @@ def _build_wheelchair(wc_ctx: Dict[str, Any]) -> WheelchairModel:
     return WheelchairModel(
         id=_safe_get(wc_ctx, "serial_number"),
         connection_status=_safe_get(wc_ctx, "connection"),
-        battery_percentage=_safe_get(wc_ctx, "battery"),
     )
 
 

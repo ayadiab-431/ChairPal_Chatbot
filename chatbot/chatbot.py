@@ -16,7 +16,7 @@ except ModuleNotFoundError:
 class ChairpalChatbot:
     def __init__(self, model_path: str = "models/intent_classifier.ftz", 
                  dataset_path: str = "data/merged_dataset.jsonl",
-                 fallback_threshold: float = 0.45,
+                 fallback_threshold: float = 0.25,
                  session_ttl_hours: int = 1):
         
         self.preprocessor = Preprocessor()
@@ -48,14 +48,9 @@ class ChairpalChatbot:
 
         memory = self._get_memory(user_id)
             
-        # 1. Clean input & extract name if mentioned
-        memory.extract_user_info(user_input)
+        # 1. Clean input (Name extraction from text disabled, relies exclusively on backend payload)
         clean_text = self.preprocessor.clean(user_input)
         clean_text_lower = clean_text.lower().strip()
-        
-        # Merge memory-extracted name into user_context if not already provided
-        if memory.user_name and not user_context.get("name"):
-            user_context["name"] = memory.user_name
             
         # 2. Detect language
         lang = self.preprocessor.detect_language(clean_text)
@@ -155,30 +150,30 @@ class ChairpalChatbot:
             return f"Yes, your name is {name}."
 
         if lang == "ar":
-            return "لسه معرفتش اسمك. قولي مثلاً: اسمي مريم."
-        return "I do not know your name yet. You can tell me: my name is Sara."
+            return "لسه معرفتش اسمك. تقدر تضيفه أو تعدله من إعدادات الملف الشخصي في التطبيق."
+        return "I do not know your name yet. You can add or update it in the app's profile settings."
 
     def _override_intent(self, text: str, intent: str, confidence: float):
         return self.rule_engine.override_intent(text, intent, confidence)
 
 
     def _is_conversational_repair(self, text: str, lang: str) -> bool:
-        repair_keywords_ar = ["مش فاهم", "وضح", "مش واضح", "وضحلي", "يعني ايه", "مش فاهمة", "وضحلي اكتر"]
-        repair_keywords_en = ["understand", "mean", "explain", "clarify", "pardon"]
+        repair_keywords_ar = ["مش فاهم", "وضح", "مش واضح", "وضحلي", "يعني ايه", "مش فاهمة", "وضحلي اكتر", "ايه"]
+        repair_keywords_en = ["understand", "mean", "explain", "clarify", "pardon", "what"]
         
         words = text.split()
         if not words:
             return False
             
+        # Strict rule: Repair queries are usually very short. If the user writes a full sentence, it's NOT a repair query.
+        if len(words) > 4:
+            return False
+            
         if lang == "ar":
-            return any(k in text for k in repair_keywords_ar) or text == "ايه"
+            # Exact match or very short keyword inclusion
+            return text in repair_keywords_ar or any(k == text or k in text for k in repair_keywords_ar)
         else:
-            # Only treat "what" as conversational repair if it is a short question (e.g. "what?", "what do you mean?")
-            is_what_repair = False
-            if "what" in words:
-                if len(words) <= 4:
-                    is_what_repair = True
-            return any(k in text for k in repair_keywords_en) or is_what_repair
+            return text in repair_keywords_en or any(k == text or k in text for k in repair_keywords_en)
 
     def _get_simplified_response(self, intent: str, lang: str, user_context: dict) -> str:
         name = user_context.get("name") if user_context else None
@@ -188,8 +183,7 @@ class ChairpalChatbot:
                 "wheelchair_usage": "ببساطة، الكرسي بيتحرك بـ 3 طرق: إما يدوي بالجويستيك المادي، أو بالموبايل لاسلكياً بالواي فاي، أو تسيبه يمشي لوحده للمكان اللي تحدده على الخريطة في التطبيق.",
                 "sensor_interpretation": "قصدي إن حساسات الكرسي بتقيس نبضات قلبك وحرارتك باستمرار عشان تتأكد إن صحتك كويسة، وبتنبهك لو فيه أي حاجة مش طبيعية.",
                 "app_help": "بوضحلك إزاي تستخدم التطبيق، زي إنك تسجل حساب مستخدم أو منظمة، أو تعدل إعداداتك، أو تعمل إعادة تعيين للباسورد لو نسيته.",
-                "connect_wheelchair": "ببساطة، شغّل الواي فاي والموقع على الموبايل، افتح تطبيق Chairpal، ادخل على الإعدادات، واضغط ربط الكرسي، ثم اختار الكرسي من الأجهزة المتاحة.",
-                "battery": "بوضحلك حالة بطارية الكرسي دلوقتي، وإزاي تحافظ عليها وتعرف شحنها كام عشان ما تفصلش منك في الطريق.",
+                "connect_wheelchair": "عشان تربط الكرسي، ادخل على أيقونة (E-Chair)، اسمح باتصال الواي فاي، ولما تظهر قائمة الكراسي القريبة اضغط (Connect) جنب اسم كرسيك للبدء بالتحكم.",
                 "navigation": "الملاحة يعني الكرسي بيستخدم خريطة في التطبيق عشان يمشي لوحده، وبيختار أقصر وأأمن طريق، وبيتفادى أي عقبات تظهر قدامه تلقائياً.",
                 "emotional_support": "أنا هنا عشان أسمعك وأدعمك نفسياً لو حاسس بتعب أو ضيق، وكمان بوضحلك إرشادات صحية بسيطة عشان تخفف من تعبك.",
                 "daily_support": "بساعدك في تنظيم يومك، زي تفكيرك بمواعيد الأكل والعلاج وتغيير جلستك لتجنب التعب والإجهاد.",
@@ -202,8 +196,7 @@ class ChairpalChatbot:
                 "wheelchair_usage": "Simply put, the wheelchair can be moved in 3 ways: using the physical joystick, using the mobile app over Wi-Fi, or letting it drive itself automatically to a location you choose on the map.",
                 "sensor_interpretation": "I mean that the wheelchair's sensors continuously measure your heart rate and body temperature to make sure you are healthy, and warn you if anything is abnormal.",
                 "app_help": "I am explaining how to use the app, like signing up as a user or organization, changing your settings, or resetting your password if you forgot it.",
-                "connect_wheelchair": "Simply, turn on Wi-Fi and Location, open the Chairpal app, go to Settings, tap Connect Wheelchair, then choose the chair from the available devices.",
-                "battery": "I am explaining the current wheelchair battery status, how to charge it, and how to monitor it so it doesn't run out.",
+                "connect_wheelchair": "To connect, tap the (E-Chair) icon, allow Wi-Fi connection, and when nearby wheelchairs appear, tap (Connect) next to your chair to start controlling it.",
                 "navigation": "Navigation means the wheelchair uses a map in the app to drive itself, choosing the shortest and safest path while avoiding any obstacles automatically.",
                 "emotional_support": "I am here to support you emotionally if you feel down, and to suggest health tips to relieve your discomfort.",
                 "daily_support": "I help you organize your day, like medication timings, meals, and changing your posture to avoid fatigue.",

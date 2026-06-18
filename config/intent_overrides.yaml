@@ -44,3 +44,35 @@ overrides:
       - type: keyword_match
         match_all: false
         keywords: ["زرار الاحمر", "الزرار الاحمر", "زر الاحمر", "الزر الاحمر", "زرار الطوارئ", "زر الطوارئ", "زرار sos", "زر sos", "فايدة الزرار", "فايدة الزر", "فايده الزرار", "لو الكرسي اتقلب", "لو وقع الكرسي", "لو سقط الكرسي", "كشف السقوط"]
+
+  - name: connect_wheelchair_ar
+    target_intent: connect_wheelchair
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: false
+        keywords: ["ربط", "اربط", "يربط", "يتصل", "يتوصل", "هيتوصل", "اوصل الكرسي"]
+
+  - name: connect_wheelchair_en
+    target_intent: connect_wheelchair
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: false
+        keywords: ["connect", "pair", "connecting", "pairing"]
+
+  - name: caregivers_ar
+    target_intent: caregiver_info
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: false
+        keywords: ["دكتور", "دكتوري", "طبيب", "طبيبي", "مرافق", "مرافقين", "مرافقيني", "اهلي", "أهلي", "دكاترة", "تواصل مع"]
+
+  - name: caregivers_en
+    target_intent: caregiver_info
+    min_confidence: 0.99
+    conditions:
+      - type: keyword_match
+        match_all: false
+        keywords: ["doctor", "physician", "companion", "companions", "family", "caregiver", "contact my"]

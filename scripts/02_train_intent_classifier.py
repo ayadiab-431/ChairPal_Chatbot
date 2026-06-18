@@ -99,7 +99,7 @@ def train_and_evaluate():
     print(f"Base Train: {len(X_train)} | Val: {len(X_val)} | Test: {len(X_test)}")
     
     # Data Augmentation for minority classes
-    minority_intents = {"fatigue", "pain", "shortness_of_breath", "normal_health", "wheelchair_stop_reason", "connect_wheelchair", "daily_support", "wheelchair_usage"}
+    minority_intents = {"fatigue", "pain", "shortness_of_breath", "normal_health", "wheelchair_stop_reason", "connect_wheelchair", "daily_support", "wheelchair_usage", "bot_identity", "greeting"}
     X_train_aug = []
     y_train_aug = []
     
